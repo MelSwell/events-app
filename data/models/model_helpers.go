@@ -38,8 +38,6 @@ func GetValsFromModel(m Model) []interface{} {
 	return vals
 }
 
-// ScanRowToModel reads the values from a sql.Row into a model.
-
 func ScanRowToModel(m Model, r *sql.Row) error {
 	val := reflect.ValueOf(m).Elem()
 	typ := val.Type()

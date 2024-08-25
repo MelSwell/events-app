@@ -5,15 +5,18 @@ import (
 	"events-app/data/models"
 	"fmt"
 	"log"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/pgx"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type DBRepo interface {
 	Connection() *sql.DB
-	RunMigrations() error
+	RunMigrations(dbName string) error
 	Create(m models.Model) (id int64, err error)
 	GetModelByID(m models.Model, id int64) (models.Model, error)
 	Update(m models.Model, id int64) error
@@ -28,13 +31,25 @@ func (sr *SqlRepo) Connection() *sql.DB {
 	return sr.DB
 }
 
-func (sr *SqlRepo) RunMigrations() error {
+func (sr *SqlRepo) RunMigrations(dbName string) error {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return fmt.Errorf("failed to get current file path")
+	}
+
+	dir := filepath.Dir(filename)
+	migrationsDir := filepath.Join(dir, "../migrations")
+	// Convert backslashes to forward slashes for Windows compatibility
+	migrationsDir = strings.ReplaceAll(migrationsDir, "\\", "/")
+
+	log.Printf("Resolved migrations directory: %s", migrationsDir)
+
 	driver, err := pgx.WithInstance(sr.DB, &pgx.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %v", err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance("file://migrations", "db", driver)
+	m, err := migrate.NewWithDatabaseInstance("file://"+migrationsDir, dbName, driver)
 	if err != nil {
 		return fmt.Errorf("failed to create migration instance: %v", err)
 	}

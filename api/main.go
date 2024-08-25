@@ -6,8 +6,8 @@ import (
 )
 
 type application struct {
-	DSN string
-	DB  repository.DBRepo
+	DSN  string
+	Repo repository.DBRepo
 }
 
 func main() {
@@ -20,8 +20,9 @@ func main() {
 	}
 	defer db.Close()
 
-	app.DB = &repository.SqlRepo{DB: db}
-	if err = app.DB.RunMigrations(); err != nil {
+	app.Repo = &repository.SqlRepo{DB: db}
+
+	if err = app.Repo.RunMigrations("db"); err != nil {
 		log.Fatal(err.Error())
 	}
 
