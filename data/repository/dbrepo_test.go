@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/jackc/pgconn"
 	_ "github.com/jackc/pgx/v4"
@@ -111,7 +112,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestDBRepo(t *testing.T) {
-	t.Run("Test Create with a User", func(t *testing.T) {
+	t.Run("Create test User", func(t *testing.T) {
 		defer handleRecover()
 
 		u := models.User{
@@ -119,6 +120,21 @@ func TestDBRepo(t *testing.T) {
 			Password: "password",
 		}
 		id, err := testRepo.Create(u)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), id)
+	})
+
+	t.Run("Create test Event", func(t *testing.T) {
+		defer handleRecover()
+
+		e := models.Event{
+			UserID:      1,
+			Name:        "Test Event",
+			Description: "A test event",
+			StartDate:   time.Now().Add(time.Hour * 24),
+		}
+		id, err := testRepo.Create(e)
 
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), id)
@@ -134,6 +150,20 @@ func TestDBRepo(t *testing.T) {
 		assert.Equal(t, int64(1), u.ID)
 		assert.NotEmpty(t, u.Password)
 		assert.NotEmpty(t, u.CreatedAt)
+	})
+
+	t.Run("Test GetEventByID", func(t *testing.T) {
+		defer handleRecover()
+
+		e, err := testRepo.GetEventByID(1)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int64(1), e.ID)
+		assert.Equal(t, int64(1), e.UserID)
+		assert.Equal(t, "Test Event", e.Name)
+		assert.Equal(t, "A test event", e.Description)
+		assert.NotEmpty(t, e.StartDate)
+		assert.NotEmpty(t, e.CreatedAt)
 	})
 
 	t.Run("Test Update", func(t *testing.T) {

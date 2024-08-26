@@ -14,13 +14,15 @@ type Model interface {
 	GetID() int64
 }
 
-// go-playground/validator suggests using a single instance of the validator,
-// I may end up needing to instantiate this higher up in the data flow? Seems fine for now
-// Alternatively, expose it as a const here and import in the main package and attach to the app struct
+// go-playground/validator suggests using a single instance of the validator, I
+// may end up needing to instantiate this higher up in the data flow? Seems fine
+// for now Alternatively, expose it as a const here and import in the main
+// package and attach to the app struct
 var validate = validator.New()
 
-// ValidateModel validates a model using the go-playground/validator package.
-// It returns an error if the provided argument does not implement the Model interface.
+// ValidateModel validates a model using the go-playground/validator package. It
+// returns an error if the provided argument does not implement the Model
+// interface.
 func ValidateModel(model interface{}) error {
 	m, ok := model.(Model)
 	if !ok {
@@ -33,10 +35,10 @@ func ValidateModel(model interface{}) error {
 	return nil
 }
 
-// GetValsFromModel returns the field values of a model as a slice of interfaces,
-// in the order of the model's column names. It is used for extracting
-// values from the model and writing them to the database.
-// Ensure the model has been validated using ValidateModel before calling.
+// GetValsFromModel returns the field values of a model as a slice of
+// interfaces, in the order of the model's column names. It is used for
+// extracting values from the model and writing them to the database. Ensure the
+// model has been validated using ValidateModel before calling.
 func GetValsFromModel(m Model) []interface{} {
 	val := reflect.ValueOf(m)
 	if val.Kind() == reflect.Ptr {

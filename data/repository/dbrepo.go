@@ -22,6 +22,7 @@ type DBRepo interface {
 	Delete(m models.Model) error
 	GetModelByID(m models.Model, id int64) (models.Model, error)
 	GetUserByID(id int64) (models.User, error)
+	GetEventByID(id int64) (models.Event, error)
 }
 
 type SqlRepo struct {
@@ -63,8 +64,8 @@ func (sr *SqlRepo) RunMigrations(dbName string) error {
 	return nil
 }
 
-// Create inserts a model into the corresponding db table and
-// returns id of the newly created record.
+// Create inserts a model into the corresponding db table and returns id of the
+// newly created record.
 func (sr *SqlRepo) Create(m models.Model) (id int64, err error) {
 	vals := models.GetValsFromModel(m)
 
@@ -128,8 +129,8 @@ func (sr *SqlRepo) Delete(m models.Model) error {
 	return nil
 }
 
-// GetModelByID retrieves a model from the db by its ID and returns it.
-// The model must be passed as a pointer to the desired model type.
+// GetModelByID retrieves a model from the db by its ID and returns it. The
+// model must be passed as a pointer to the desired model type.
 func (sr *SqlRepo) GetModelByID(m models.Model, id int64) (models.Model, error) {
 	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", m.TableName())
 	r := sr.DB.QueryRow(query, id)
@@ -152,6 +153,20 @@ func (sr *SqlRepo) GetUserByID(id int64) (models.User, error) {
 	}
 
 	return *user, nil
+}
+
+func (sr *SqlRepo) GetEventByID(id int64) (models.Event, error) {
+	model, err := sr.GetModelByID(&models.Event{}, id)
+	if err != nil {
+		return models.Event{}, err
+	}
+
+	event, ok := model.(*models.Event)
+	if !ok {
+		return models.Event{}, fmt.Errorf("type assertion to Event failed")
+	}
+
+	return *event, nil
 }
 
 func placeholders(n int) string {
