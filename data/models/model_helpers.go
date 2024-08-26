@@ -2,12 +2,14 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 )
 
 type Model interface {
 	TableName() string
 	ColumnNames() []string
+	GetID() int64
 }
 
 // GetValsFromModel returns the field values of a model as a slice of interfaces,
@@ -15,7 +17,10 @@ type Model interface {
 // Ensure incoming data has been validated in req handler with ReadJSON before invocation
 func GetValsFromModel(m Model) []interface{} {
 	val := reflect.ValueOf(m)
-	typ := reflect.TypeOf(m)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	typ := val.Type()
 	numFields := val.NumField()
 
 	fieldMap := make(map[string]interface{})
@@ -38,16 +43,22 @@ func GetValsFromModel(m Model) []interface{} {
 	return vals
 }
 
+// ScanRowToModel scans a sql.Row into a Model. The model must be a pointer to a struct implementing the Model interface.
 func ScanRowToModel(m Model, r *sql.Row) error {
-	val := reflect.ValueOf(m).Elem()
+	val := reflect.ValueOf(m)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	} else {
+		return fmt.Errorf("expected pointer to struct, got %s", val.Kind())
+	}
 	typ := val.Type()
 
-	vals := make([]interface{}, typ.NumField())
+	fieldPtrs := make([]interface{}, typ.NumField())
 	for i := 0; i < typ.NumField(); i++ {
-		vals[i] = val.Field(i).Addr().Interface()
+		fieldPtrs[i] = val.Field(i).Addr().Interface()
 	}
 
-	if err := r.Scan(vals...); err != nil {
+	if err := r.Scan(fieldPtrs...); err != nil {
 		return err
 	}
 	return nil

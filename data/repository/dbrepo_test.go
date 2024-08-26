@@ -111,8 +111,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestDBRepo(t *testing.T) {
-
-	t.Run("Test Create() with a User", func(t *testing.T) {
+	t.Run("Test Create with a User", func(t *testing.T) {
 		defer handleRecover()
 
 		u := models.User{
@@ -125,21 +124,63 @@ func TestDBRepo(t *testing.T) {
 		assert.Equal(t, int64(1), id)
 	})
 
-	t.Run("Test GetModelByID with new User", func(t *testing.T) {
+	t.Run("Test GetUserByID", func(t *testing.T) {
 		defer handleRecover()
 
-		var u models.User
-		model, err := testRepo.GetModelByID(u, 1)
-
-		u, ok := model.(models.User)
-		if !ok {
-			t.Fatalf("Expected User, got %T", u)
-		}
+		u, err := testRepo.GetUserByID(1)
 		assert.NoError(t, err)
 
 		assert.Equal(t, "hello@example.com", u.Email)
 		assert.Equal(t, int64(1), u.ID)
 		assert.NotEmpty(t, u.Password)
 		assert.NotEmpty(t, u.CreatedAt)
+	})
+
+	t.Run("Test Update", func(t *testing.T) {
+		defer handleRecover()
+
+		u, err := testRepo.GetUserByID(1)
+		assert.NoError(t, err)
+
+		u.Email = "newEmail@example.com"
+		err = testRepo.Update(u)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Test persistence of Update", func(t *testing.T) {
+		defer handleRecover()
+
+		u, err := testRepo.GetUserByID(1)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "newEmail@example.com", u.Email)
+	})
+
+	t.Run("Test unique constraint", func(t *testing.T) {
+		defer handleRecover()
+
+		u := models.User{
+			Email:    "newEmail@example.com",
+			Password: "password",
+		}
+		_, err := testRepo.Create(u)
+		assert.Error(t, err)
+	})
+
+	t.Run("Test Delete", func(t *testing.T) {
+		defer handleRecover()
+
+		u, err := testRepo.GetUserByID(1)
+		assert.NoError(t, err)
+
+		err = testRepo.Delete(u)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Test persistence of Delete", func(t *testing.T) {
+		defer handleRecover()
+
+		_, err := testRepo.GetUserByID(1)
+		assert.Error(t, err)
 	})
 }

@@ -30,22 +30,3 @@ func openDB(dsn string) (*sql.DB, error) {
 
 	return db, nil
 }
-
-// func (app *application) runMigrations() error {
-// 	driver, err := pgx.WithInstance(app.DB, &pgx.Config{})
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create migration driver: %v", err)
-// 	}
-
-// 	m, err := migrate.NewWithDatabaseInstance("file://migrations", "db", driver)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create migration instance: %v", err)
-// 	}
-
-// 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-// 		return fmt.Errorf("failed to run migrations: %v", err)
-// 	}
-
-// 	log.Println("Migrations complete")
-// 	return nil
-// }

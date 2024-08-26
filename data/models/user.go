@@ -1,7 +1,7 @@
 package models
 
 type User struct {
-	ID        int64  `validate:"required" json:"id"`
+	ID        int64  `validate:"required" json:"id" db:"id"`
 	Email     string `validate:"required,email" json:"email" db:"email"`
 	Password  string `validate:"required,min=6,max120" json:"password" db:"password"`
 	CreatedAt string `json:"createdAt" db:"created_at"`
@@ -13,4 +13,8 @@ func (User) TableName() string {
 
 func (u User) ColumnNames() []string {
 	return getColumnNames(u)
+}
+
+func (u User) GetID() int64 {
+	return u.ID
 }

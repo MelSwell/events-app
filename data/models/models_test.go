@@ -8,7 +8,7 @@ import (
 )
 
 type MockModel struct {
-	ID        int    `db:"id"`
+	ID        int64  `db:"id"`
 	Name      string `db:"name"`
 	Email     string `db:"email"`
 	CreatedAt string `db:"created_at"`
@@ -20,6 +20,10 @@ func (m MockModel) TableName() string {
 
 func (m MockModel) ColumnNames() []string {
 	return getColumnNames(m)
+}
+
+func (m MockModel) GetID() int64 {
+	return m.ID
 }
 
 func TestGetValsFromModel(t *testing.T) {
@@ -37,7 +41,6 @@ func TestGetValsFromModel(t *testing.T) {
 }
 
 func TestScanRowToModel(t *testing.T) {
-	model := &MockModel{}
 
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -51,9 +54,12 @@ func TestScanRowToModel(t *testing.T) {
 	mock.ExpectQuery("SELECT \\* FROM mock_models WHERE id = \\?").WillReturnRows(rows)
 	row := db.QueryRow("SELECT * FROM mock_models WHERE id = ?", 1)
 
+	// Function under test
+	model := &MockModel{}
 	err = ScanRowToModel(model, row)
+
 	assert.NoError(t, err)
-	assert.Equal(t, 1, model.ID)
+	assert.Equal(t, int64(1), model.ID)
 	assert.Equal(t, "Test", model.Name)
 	assert.Equal(t, "example@email.com", model.Email)
 	assert.Equal(t, "2023-10-01", model.CreatedAt)
