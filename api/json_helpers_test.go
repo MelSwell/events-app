@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"events-app/data/models"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +22,7 @@ func TestReadJSON(t *testing.T) {
 	}{
 		{
 			name:          "Valid JSON",
-			body:          `{"email":"example@hello.com"}`,
+			body:          `{"email":"example@hello.com", "password":"password"}`,
 			expectedError: "",
 			validationReq: true,
 		},
@@ -45,14 +46,14 @@ func TestReadJSON(t *testing.T) {
 		},
 		{
 			name:          "Missing Required Field",
-			body:          `{"email":""}`,
-			expectedError: "Key: 'Email' Error:Field validation for 'Email' failed on the 'required' tag",
+			body:          `{"email":"", "password":"password"}`,
+			expectedError: "Key: 'User.Email' Error:Field validation for 'Email' failed on the 'required' tag",
 			validationReq: true,
 		},
 		{
 			name:          "Invalid Field",
-			body:          `{"email":"example@hello"}`,
-			expectedError: "Key: 'Email' Error:Field validation for 'Email' failed on the 'email' tag",
+			body:          `{"email":"example@hello", "password":"password"}`,
+			expectedError: "Key: 'User.Email' Error:Field validation for 'Email' failed on the 'email' tag",
 			validationReq: true,
 		},
 	}
@@ -61,9 +62,8 @@ func TestReadJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/", bytes.NewBufferString(tt.body))
 			w := httptest.NewRecorder()
-			var data struct {
-				Email string `json:"email" validate:"required,email"`
-			}
+
+			var data models.User
 			err := app.ReadJSON(w, req, &data, tt.validationReq)
 			if tt.expectedError == "" {
 				assert.NoError(t, err)

@@ -3,11 +3,10 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"events-app/data/models"
 	"fmt"
 	"io"
 	"net/http"
-
-	"github.com/go-playground/validator"
 )
 
 type successJSON struct {
@@ -68,8 +67,6 @@ func (app *application) SendErrorJSON(w http.ResponseWriter, statusCode int, err
 	return marshalAndSend(w, jsonRes, statusCode)
 }
 
-var validate = validator.New()
-
 func (app *application) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{}, validationReq bool) error {
 	maxBytes := 1024 * 1024 // one megabyte
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
@@ -89,8 +86,7 @@ func (app *application) ReadJSON(w http.ResponseWriter, r *http.Request, data in
 	}
 
 	if validationReq {
-		err := validate.Struct(data)
-		if err != nil {
+		if err = models.ValidateModel(data); err != nil {
 			return err
 		}
 	}

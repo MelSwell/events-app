@@ -1,10 +1,12 @@
 package models
 
+import "time"
+
 type User struct {
-	ID        int64  `validate:"required" json:"id" db:"id"`
-	Email     string `validate:"required,email" json:"email" db:"email"`
-	Password  string `validate:"required,min=6,max120" json:"password" db:"password"`
-	CreatedAt string `json:"createdAt" db:"created_at"`
+	ID        int64     `json:"id" db:"id"`
+	Email     string    `validate:"required,email" json:"email" db:"email"`
+	Password  string    `validate:"min=6,max=120" json:"password" db:"password"`
+	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 }
 
 func (User) TableName() string {
@@ -12,7 +14,7 @@ func (User) TableName() string {
 }
 
 func (u User) ColumnNames() []string {
-	return getColumnNames(u)
+	return GetColumnNames(u)
 }
 
 func (u User) GetID() int64 {
