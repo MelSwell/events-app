@@ -67,6 +67,7 @@ func TestReadJSON(t *testing.T) {
 			err := app.ReadJSON(w, req, &data, tt.validationReq)
 			if tt.expectedError == "" {
 				assert.NoError(t, err)
+				assert.Equal(t, "example@hello.com", data.Email)
 			} else {
 				assert.EqualError(t, err, tt.expectedError)
 			}

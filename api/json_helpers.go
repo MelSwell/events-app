@@ -67,14 +67,17 @@ func (app *application) SendErrorJSON(w http.ResponseWriter, statusCode int, err
 	return marshalAndSend(w, jsonRes, statusCode)
 }
 
-func (app *application) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{}, validationReq bool) error {
+// ReadJSON reads JSON from the request body and decodes it into the provided
+// data interface. If data is a model and requires validation, set
+// modelValidationRequired to true.
+func (app *application) ReadJSON(w http.ResponseWriter, r *http.Request, dest interface{}, modelValidationRequired bool) error {
 	maxBytes := 1024 * 1024 // one megabyte
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 
-	// attempt to decode the data
-	err := dec.Decode(data)
+	// attempt to decode the data into the provided interface
+	err := dec.Decode(dest)
 	if err != nil {
 		return err
 	}
@@ -85,8 +88,8 @@ func (app *application) ReadJSON(w http.ResponseWriter, r *http.Request, data in
 		return errors.New("body must only contain a single JSON value")
 	}
 
-	if validationReq {
-		if err = models.ValidateModel(data); err != nil {
+	if modelValidationRequired {
+		if err = models.ValidateModel(dest); err != nil {
 			return err
 		}
 	}

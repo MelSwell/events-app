@@ -23,6 +23,8 @@ type DBRepo interface {
 	GetModelByID(m models.Model, id int64) (models.Model, error)
 	GetUserByID(id int64) (models.User, error)
 	GetEventByID(id int64) (models.Event, error)
+	QueryModel(m models.Model, queryParams map[string]string) (interface{}, error)
+	QueryEvents(queryParams map[string]string) ([]models.Event, error)
 }
 
 type SqlRepo struct {
@@ -68,11 +70,16 @@ func (sr *SqlRepo) RunMigrations(dbName string) error {
 // newly created record.
 func (sr *SqlRepo) Create(m models.Model) (id int64, err error) {
 	vals := models.GetValsFromModel(m)
+	placeholders := make([]string, len(vals))
+	for i := 1; i <= len(vals); i++ {
+		placeholders[i-1] = fmt.Sprintf("$%d", i)
+	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING id",
+	query := fmt.Sprintf(
+		`INSERT INTO %s (%s) VALUES (%s) RETURNING id`,
 		m.TableName(),
-		strings.Join(m.ColumnNames(), ", "),
-		placeholders(len(vals)))
+		strings.Join(models.GetColumnNames(m, true), ", "),
+		strings.Join(placeholders, ", "))
 
 	stmt, err := sr.DB.Prepare(query)
 	if err != nil {
@@ -89,14 +96,15 @@ func (sr *SqlRepo) Create(m models.Model) (id int64, err error) {
 }
 
 func (sr *SqlRepo) Update(m models.Model) error {
-	columns := m.ColumnNames()
+	columns := models.GetColumnNames(m, true)
 
 	setClause := make([]string, (len(columns)))
 	for i, c := range columns {
 		setClause[i] = fmt.Sprintf("%s = $%d", c, i+1)
 	}
 
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d",
+	query := fmt.Sprintf(
+		`UPDATE %s SET %s WHERE id = $%d`,
 		m.TableName(),
 		strings.Join(setClause, ", "),
 		len(columns)+1)
@@ -132,9 +140,12 @@ func (sr *SqlRepo) Delete(m models.Model) error {
 // GetModelByID retrieves a model from the db by its ID and returns it. The
 // model must be passed as a pointer to the desired model type.
 func (sr *SqlRepo) GetModelByID(m models.Model, id int64) (models.Model, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", m.TableName())
-	r := sr.DB.QueryRow(query, id)
+	query := fmt.Sprintf(
+		`SELECT %s FROM %s WHERE id = $1`,
+		strings.Join(models.GetColumnNames(m, false), ", "),
+		m.TableName())
 
+	r := sr.DB.QueryRow(query, id)
 	if err := models.ScanRowToModel(m, r); err != nil {
 		return nil, err
 	}
@@ -169,10 +180,45 @@ func (sr *SqlRepo) GetEventByID(id int64) (models.Event, error) {
 	return *event, nil
 }
 
-func placeholders(n int) string {
-	ph := make([]string, n)
-	for i := 1; i <= n; i++ {
-		ph[i-1] = fmt.Sprintf("$%d", i)
+// QueryModel retrieves a slice of models from the db based on the provided
+// model and query parameters, and returns the slice as an interface{}. It
+// returns an error if the query params are invalid or if the query fails. If no
+// params are provided, it returns the first 10 records from the model's table
+// sorted by ID ascending.
+func (sr *SqlRepo) QueryModel(m models.Model, queryParams map[string]string) (interface{}, error) {
+	clauses, values, err := buildQueryClauses(queryParams, m)
+	if err != nil {
+		return nil, fmt.Errorf("invalid query: %v", err)
 	}
-	return strings.Join(ph, ", ")
+	query := fmt.Sprintf(
+		`SELECT %s FROM %s %s`,
+		strings.Join(models.GetColumnNames(m, false), ", "),
+		m.TableName(),
+		clauses)
+
+	rows, err := sr.DB.Query(query, values...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results, err := models.ScanRowsToSliceOfModels(m, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (sr *SqlRepo) QueryEvents(queryParams map[string]string) ([]models.Event, error) {
+	results, err := sr.QueryModel(models.Event{}, queryParams)
+	if err != nil {
+		return nil, err
+	}
+	events, ok := results.(*[]models.Event)
+	if !ok {
+		return nil, fmt.Errorf("type assertion to *[]models.Event failed, got %T", results)
+	}
+
+	return *events, nil
 }

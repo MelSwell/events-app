@@ -10,8 +10,8 @@ import (
 
 type Model interface {
 	TableName() string
-	ColumnNames() []string
 	GetID() int64
+	EmptySlice() interface{}
 }
 
 // go-playground/validator suggests using a single instance of the validator, I
@@ -37,8 +37,8 @@ func ValidateModel(model interface{}) error {
 
 // GetValsFromModel returns the field values of a model as a slice of
 // interfaces, in the order of the model's column names. It is used for
-// extracting values from the model and writing them to the database. Ensure the
-// model has been validated using ValidateModel before calling.
+// extracting values from the model and writing them to the database. Validation
+// of the model should be done before use.
 func GetValsFromModel(m Model) []interface{} {
 	val := reflect.ValueOf(m)
 	if val.Kind() == reflect.Ptr {
@@ -50,15 +50,16 @@ func GetValsFromModel(m Model) []interface{} {
 	fieldMap := make(map[string]interface{})
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
-		// skip default fields managed by the DB
-		if field.Name == "ID" || field.Name == "CreatedAt" {
+
+		if field.Tag.Get("readOnly") == "true" {
 			continue
 		}
+
 		dbTag := field.Tag.Get("db")
 		fieldMap[dbTag] = val.Field(i).Interface()
 	}
 
-	columnNames := m.ColumnNames()
+	columnNames := GetColumnNames(m, true)
 	vals := make([]interface{}, len(columnNames))
 	for i, cn := range columnNames {
 		vals[i] = fieldMap[cn]
@@ -67,17 +68,15 @@ func GetValsFromModel(m Model) []interface{} {
 	return vals
 }
 
-// ScanRowToModel scans a single SQL row into a given model.
-// It takes a pointer to a model and passes a slice of pointers
-// to the model's fields to the sql.Row's Scan method.
-// It returns an error if the scan fails or the model is not a pointer.
+// ScanRowToModel scans a single SQL row into a given model. It takes a model
+// and passes a slice of pointers to the model's fields to the sql.Row's Scan
+// method. It returns an error if the scan fails or the model is not a pointer.
 func ScanRowToModel(m Model, r *sql.Row) error {
 	val := reflect.ValueOf(m)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
-	} else {
-		return fmt.Errorf("expected pointer to struct, got %s", val.Kind())
 	}
+
 	typ := val.Type()
 
 	fieldPtrs := make([]interface{}, typ.NumField())
@@ -91,21 +90,81 @@ func ScanRowToModel(m Model, r *sql.Row) error {
 	return nil
 }
 
-// GetColumnNames returns the field names of a model as a slice of db formatted strings.
-// The order of the returned slice is the order in which the fields are defined in the model.
-// Ensure model fields are defined in the order that they are defined in the db schema, and a corresponding db tag is set.
-func GetColumnNames(m Model) []string {
-	typ := reflect.TypeOf(m)
+func ScanRowsToSliceOfModels(m Model, rows *sql.Rows) (interface{}, error) {
+	// Obtain the slice of models using the EmptySlice method, which returns a
+	// pointer to an empty slice of the model type as an interface{}
+	modelsSlice := m.EmptySlice()
+
+	// Dereference the interface wrapper and make sure we have a slice
+	sliceVal := reflect.ValueOf(modelsSlice).Elem()
+	if sliceVal.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("expected slice, got %s", sliceVal.Kind())
+	}
+
+	// Get the type of the model in the slice
+	elemType := sliceVal.Type().Elem()
+
+	for rows.Next() {
+		// Create a new instance of the model type and dereference it
+		model := reflect.New(elemType).Elem()
+
+		// Prepare field pointers for scanning
+		fieldPtrs := make([]interface{}, model.NumField())
+		for i := 0; i < model.NumField(); i++ {
+			fieldPtrs[i] = model.Field(i).Addr().Interface()
+		}
+
+		// Scan the row into the model's fields
+		if err := rows.Scan(fieldPtrs...); err != nil {
+			return nil, err
+		}
+
+		// Append the new model instance to the slice
+		sliceVal.Set(reflect.Append(sliceVal, model))
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return modelsSlice, nil
+}
+
+// GetColumnNames returns the model's column names as a slice of strings.
+func GetColumnNames(m Model, excludeReadOnlyFields bool) []string {
+	val := reflect.ValueOf(m)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	typ := val.Type()
 	var columnNames []string
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		tag := field.Tag.Get("db")
-		// skip default fields managed by the DB
-		if tag == "id" || tag == "created_at" {
-			continue
+
+		if excludeReadOnlyFields {
+
+			if field.Tag.Get("readOnly") == "true" {
+				continue
+			}
+
 		}
+
 		columnNames = append(columnNames, tag)
 	}
 	return columnNames
+}
+
+// Returns a map of the model's field tags where key is JSON and value is DB
+func MapJsonTagsToDB(m Model) map[string]string {
+	typ := reflect.TypeOf(m)
+	tagMap := make(map[string]string)
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		jsonTag := field.Tag.Get("json")
+		tagMap[jsonTag] = field.Tag.Get("db")
+	}
+	return tagMap
 }
