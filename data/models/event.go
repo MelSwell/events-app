@@ -16,10 +16,10 @@ func (Event) TableName() string {
 	return "events"
 }
 
-func (e Event) GetID() int64 {
-	return e.ID
+func (Event) EmptySlice() interface{} {
+	return &[]Event{}
 }
 
-func (e Event) EmptySlice() interface{} {
-	return &[]Event{}
+func (e Event) GetID() int64 {
+	return e.ID
 }

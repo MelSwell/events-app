@@ -13,10 +13,10 @@ func (User) TableName() string {
 	return "users"
 }
 
-func (u User) GetID() int64 {
-	return u.ID
+func (User) EmptySlice() interface{} {
+	return &[]User{}
 }
 
-func (u User) EmptySlice() interface{} {
-	return &[]User{}
+func (u User) GetID() int64 {
+	return u.ID
 }

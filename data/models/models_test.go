@@ -206,7 +206,7 @@ func TestScanToModel(t *testing.T) {
 		defer sqlRows.Close()
 
 		model := MockModel{}
-		results, err := ScanRowsToSliceOfModels(model, sqlRows)
+		results, err := ScanRowsToSliceOfModels(model, sqlRows, 2)
 		if err != nil {
 			t.Fatalf("an error '%s' was not expected when scanning rows to slice of models", err)
 		}

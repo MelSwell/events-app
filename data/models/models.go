@@ -73,10 +73,10 @@ func GetValsFromModel(m Model) []interface{} {
 // method. It returns an error if the scan fails or the model is not a pointer.
 func ScanRowToModel(m Model, r *sql.Row) error {
 	val := reflect.ValueOf(m)
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
+	if val.Kind() != reflect.Ptr {
+		return fmt.Errorf("expected pointer to model, got %T", m)
 	}
-
+	val = val.Elem()
 	typ := val.Type()
 
 	fieldPtrs := make([]interface{}, typ.NumField())
@@ -90,12 +90,12 @@ func ScanRowToModel(m Model, r *sql.Row) error {
 	return nil
 }
 
-func ScanRowsToSliceOfModels(m Model, rows *sql.Rows) (interface{}, error) {
+func ScanRowsToSliceOfModels(m Model, rows *sql.Rows, expectedRows int) (interface{}, error) {
 	// Obtain the slice of models using the EmptySlice method, which returns a
 	// pointer to an empty slice of the model type as an interface{}
 	modelsSlice := m.EmptySlice()
 
-	// Dereference the interface wrapper and make sure we have a slice
+	// Dereference the interface wrapper with Elem(), and make sure we have a slice
 	sliceVal := reflect.ValueOf(modelsSlice).Elem()
 	if sliceVal.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("expected slice, got %s", sliceVal.Kind())
@@ -103,6 +103,13 @@ func ScanRowsToSliceOfModels(m Model, rows *sql.Rows) (interface{}, error) {
 
 	// Get the type of the model in the slice
 	elemType := sliceVal.Type().Elem()
+
+	// We can optimize by setting the initial capacity of the slice to avoid
+	// resizing the slice multiple times. We're makng our best guess based on the
+	// expected number of rows specified by the caller (e.g. the limit parameter
+	// of a URL query).
+	initialCapacity := determineInitialCapacity(expectedRows)
+	sliceVal.Set(reflect.MakeSlice(sliceVal.Type(), 0, initialCapacity))
 
 	for rows.Next() {
 		// Create a new instance of the model type and dereference it
@@ -158,7 +165,11 @@ func GetColumnNames(m Model, excludeReadOnlyFields bool) []string {
 
 // Returns a map of the model's field tags where key is JSON and value is DB
 func MapJsonTagsToDB(m Model) map[string]string {
-	typ := reflect.TypeOf(m)
+	val := reflect.ValueOf(m)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	typ := val.Type()
 	tagMap := make(map[string]string)
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -167,4 +178,32 @@ func MapJsonTagsToDB(m Model) map[string]string {
 		tagMap[jsonTag] = field.Tag.Get("db")
 	}
 	return tagMap
+}
+
+// Helper function to determine the initial capacity based on expected rows
+func determineInitialCapacity(expectedRows int) int {
+	switch {
+	case expectedRows <= 10:
+		return 10
+	case expectedRows <= 25:
+		return 20
+	case expectedRows <= 50:
+		return 35
+	case expectedRows <= 100:
+		return 75
+	case expectedRows <= 200:
+		return 150
+	case expectedRows <= 300:
+		return 250
+	case expectedRows <= 500:
+		return 400
+	case expectedRows <= 1000:
+		return 900
+	case expectedRows <= 2000:
+		return 1800
+	case expectedRows <= 5000:
+		return 2500
+	default:
+		return 5000
+	}
 }

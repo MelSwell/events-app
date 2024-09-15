@@ -7,6 +7,7 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -202,7 +203,10 @@ func (sr *SqlRepo) QueryModel(m models.Model, queryParams map[string]string) (in
 	}
 	defer rows.Close()
 
-	results, err := models.ScanRowsToSliceOfModels(m, rows)
+	// buildQueryClauses already made sure this is an int so we don't need to
+	// worry about the error
+	limit, _ := strconv.Atoi(queryParams["limit"])
+	results, err := models.ScanRowsToSliceOfModels(m, rows, limit)
 	if err != nil {
 		return nil, err
 	}

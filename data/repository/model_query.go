@@ -9,12 +9,13 @@ import (
 
 // buildQuery constructs a formatted and parameterized sql string from the
 // given query parameters. It returns the finished sql string, and the values to be
-// passed alongside the query
-func buildQueryClauses(queryParams map[string]string, m models.Model) (string, []interface{}, error) {
+// passed alongside the query. It returns an error if any of the query
+// parameters fail to validate against the model's jsonMap.
+func buildQueryClauses(queryParams map[string]string, m models.Model) (clauses string, sqlVals []interface{}, err error) {
 	placeholderIndex := 1
 	jsonMap := models.MapJsonTagsToDB(m)
 	// Filtering
-	whereClause, values, placeholderIndex, err := buildWhereClause(queryParams, placeholderIndex, jsonMap)
+	whereClause, sqlVals, placeholderIndex, err := buildWhereClause(queryParams, placeholderIndex, jsonMap)
 	if err != nil {
 		return "", nil, err
 	}
@@ -32,28 +33,24 @@ func buildQueryClauses(queryParams map[string]string, m models.Model) (string, [
 		return "", nil, err
 	}
 	paginationClause := fmt.Sprintf("LIMIT $%d OFFSET $%d", placeholderIndex, placeholderIndex+1)
-	values = append(values, limit, offset)
+	sqlVals = append(sqlVals, limit, offset)
 
-	var clauses string
 	if whereClause != "" {
 		clauses = fmt.Sprintf("%s %s %s", whereClause, orderClause, paginationClause)
 	} else {
 		clauses = fmt.Sprintf("%s %s", orderClause, paginationClause)
 	}
 
-	return clauses, values, nil
+	return clauses, sqlVals, nil
 }
 
 // buildWhereClause constructs a formatted and parameterized sql WHERE clause.
-// It is a helper for buildQueryClauses. It returns the finished WHERE clause,
-// the values to be ultimately passed alongside the query, and the current
-// placeholder count. If there are no search conditions in the query parameters,
-// it returns an empty string for the WHERE clause.
-func buildWhereClause(queryParams map[string]string, phIndex int, jsonMap map[string]string) (whereClause string, values []interface{}, placeholderIndex int, err error) {
-	// We track these slices through all buildWhereClause helper functions,
-	// appending to them directly as we go
+// It returns the finished WHERE clause, the values to be ultimately passed
+// alongside the query, and the current placeholder count. If there are no
+// search conditions in the query parameters, it returns an empty string for the
+// WHERE clause.
+func buildWhereClause(queryParams map[string]string, phIndex int, jsonMap map[string]string) (whereClause string, sqlVals []interface{}, placeholderIndex int, err error) {
 	whereClauseParts := []string{}
-	values = []interface{}{}
 
 	for key, value := range queryParams {
 		// Skip these for later handling
@@ -70,7 +67,7 @@ func buildWhereClause(queryParams map[string]string, phIndex int, jsonMap map[st
 		// values is of variable length (e.g. name_anyOf=Tom,Dick,Harry;
 		// name_anyOf=Tom,Dick)
 		if operator == "IN" {
-			whereClauseParts, values, phIndex, err = handleInOperator(key, value, phIndex, whereClauseParts, values, jsonMap)
+			whereClauseParts, sqlVals, phIndex, err = handleInOperator(key, value, phIndex, whereClauseParts, sqlVals, jsonMap)
 			if err != nil {
 				return "", nil, 0, err
 			}
@@ -82,7 +79,7 @@ func buildWhereClause(queryParams map[string]string, phIndex int, jsonMap map[st
 		whereClauseParts = append(whereClauseParts, fmt.Sprintf("%s %s $%d", dbColumn, operator, phIndex))
 		// Perform type conversion on numerical characters before appending to vals slice
 		formattedVal := convertValueIfNumeric(value)
-		values = append(values, formattedVal)
+		sqlVals = append(sqlVals, formattedVal)
 		phIndex++
 	}
 
@@ -91,12 +88,13 @@ func buildWhereClause(queryParams map[string]string, phIndex int, jsonMap map[st
 		whereClause = "WHERE " + strings.Join(whereClauseParts, " AND ")
 	}
 
-	return whereClause, values, phIndex, nil
+	return whereClause, sqlVals, phIndex, nil
 }
 
 // parseOperatorAndKey determines the SQL operator and strips the operator
 // suffix from the key. It returns the operator, the key's database column
-// mapping, and the modified value (if applicable).
+// mapping, and the modified value (if applicable). It returns an error if the
+// key does not exist in the model's jsonMap.
 func parseOperatorAndKey(key, value string, jsonMap map[string]string) (operator, dbColumn string, modifiedValue string, err error) {
 	operator = "="
 	modifiedValue = value
@@ -145,7 +143,7 @@ func parseOperatorAndKey(key, value string, jsonMap map[string]string) (operator
 // values, for the IN operator  It is a helper for buildWhereClause. It returns
 // the still-under-construction WHERE clause parts, the values to be ultimately passed
 // alongside the query, and the current placeholder count.
-func handleInOperator(key, value string, phIndex int, whereClauseParts []string, values []interface{}, jsonMap map[string]string) ([]string, []interface{}, int, error) {
+func handleInOperator(key, value string, phIndex int, whereClauseParts []string, sqlVals []interface{}, jsonMap map[string]string) ([]string, []interface{}, int, error) {
 	anyOfValuesList := strings.Split(value, ",")
 	placeholders := []string{}
 
@@ -153,7 +151,7 @@ func handleInOperator(key, value string, phIndex int, whereClauseParts []string,
 		placeholders = append(placeholders, fmt.Sprintf("$%d", phIndex))
 		// Perform numerical type conversion here if needed
 		formattedVal := convertValueIfNumeric(v)
-		values = append(values, formattedVal)
+		sqlVals = append(sqlVals, formattedVal)
 		phIndex++
 	}
 
@@ -164,7 +162,7 @@ func handleInOperator(key, value string, phIndex int, whereClauseParts []string,
 
 	dbColumn := jsonMap[key]
 	whereClauseParts = append(whereClauseParts, fmt.Sprintf("%s IN (%s)", dbColumn, strings.Join(placeholders, ",")))
-	return whereClauseParts, values, phIndex, nil
+	return whereClauseParts, sqlVals, phIndex, nil
 }
 
 func buildSortingClause(queryParams map[string]string, jsonMap map[string]string) (string, string, error) {
